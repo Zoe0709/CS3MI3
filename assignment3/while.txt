@@ -1,0 +1,378 @@
+imperative      functional      logical 
+
+we mentioned that recursion can be implemented using a "fixed point combinator": have a term 
+applied to itself 
+fix = λ f → ((λ x → f (λ y → x x y)) 
+             (λ x → f (λ y → x x y)))
+
+This has the property 
+fix g v = g(fix g) v
+
+With typed λ-calculus, the basic construct is recursion. 
+In the typed λ-calculus fix cannot be typed. 
+Solution: add fix as a basic construct of the language 
+No mutability -> difference between functional and imperative paradigm 
+
+
+
+[basic ideas of imperative paradigm]
+The Von Neumann architecture gives us the following basic view of a computer. 
+
+Input -> (CPU (Control Unit, Arithmetic Logic Unit) <-> Memory) -> Output 
+
+Programs themselves are stored in memory. Fetch is the next instruction from memory. The location
+of that instruction is stored in a program counter. 
+
+How do such a device compute? 
+Instructions on such a machine are run in a "fetch-decode cycle". Either:
+- fetch from memory, perform arithmetic, and write back to the memory
+- fetch from memory, perform comparison (je, jle), and modify the program counter (to pull not the next
+- instruction but some other instruction in the memory)
+
+by default if we don't modify the program counter, we increment the counter by one (next 
+instruction) in the list. 
+
+"lambda calculus" - basic tools: composing by applying functions to each other and doing recursion 
+"imperative" - we can still can compose by putting one block of instruction after another, but we don't
+             have the idea of recursion (but we can use jump). We have a notion of memory and time
+             
+we can implement lambda calculus with imperative language. in this way, lambda calculus is on top of 
+(on a higher level) imperative languages  
+
+important: notion of "memory"
+
+
+
+
+[simple imperative language "WHILE"]
+For the moment, we will consider a "memory state" σ to be a function between variable names and values.
+(To begin, we will only consider integer values) --> map from a variable name to integer. 
+
+We can visualize a state σ: 
+eg. if σ(x) = 5 and σ(y) = 7
+          .
+          .
+        -----
+        x | 5
+        -----
+        y | 7
+        -----
+        z | 
+        -----
+          .
+          .
+    
+We separate things into either expressions or statements:
+"expression" is something that's evaluated to get a value. 
+"statement" does not have a value (not interested in getting a numerical value in a while loop; we're
+only interested in how it changes the state outside the program). it only has side effects
+
+Our laanguage "WHILE" is given by the grammar:
+<expr> ::= int_const 
+        | - <expr> 
+        | <expr> <op> <expr>
+        | bool_const (true, false)
+        | ¬ <expr>
+        | <expr> <bop> <expr>
+        | var 
+
+<op> ::= + | * | - | /
+
+<bop> ::= and | or 
+
+as variable change, the value of expression can change. but expressions dont have side effect (dont 
+read from outside resources; only from the state). 
+
+statements (actual building blocks for programs)
+<stmt> ::= skip  (empty program; does nothing)
+        | var := <expr> (assignment. update value of variable in memory as value of expression in 
+                        current state of memory )
+        | <stmt> ; <stmt> (composition. takes 2 statements and glues them together one after other)
+        | if <expr> then <stmt> else <stmt> 
+        | while <expr> do <stmt>
+
+
+
+
+[A stack machine for WHILE]
+Consider a stack machine consisting of: 
+* two stacks (FILO structures)
+- (1) A "control" stack
+- (2) A "result" stack 
+* A processor
+- what we're going to describe the behaviour of 
+* A memory unit 
+- to store the value of variables 
+
+The state of such a machine can be described as a triple 
+<c, r, σ>
+where:
+c = contents of control stack 
+r = contents of the result stack 
+σ = memory state 
+It's a snapshot of the current state of stack and memory 
+
+Processor takes such a triple and produces the next triple. Looks at the last element into the stack 
+(top of the stack) and look at any part of the memory and decide what will the next state of the 
+machine is. whether to push, pop stack, change contents of memory of leave them alone. 
+-> mapping one triple to another triple  
+
+Given a stack S, we will write "e ̇S" for the stack resulting from pushing e onto s.
+We will write "nil" for the empty stack. 
+
+Take program -> put it onto the control stack -> machine will start processing the program, breaking 
+apart putting pieces on top of control stack, storing things on result stack -> at the end there should 
+be nothing on the result stack, the effect of program will be on the change to memory state. 
+
+expr -> control stack -> at the end its value will be on the result stack 
+
+[Semantics of expression]
+If n is a integer constant:
+<n ̇c, r σ> ~> <c, n ̇ r, σ> We take the value off control stack and put it on top of result stack 
+If b is a constant boolean:
+<b ̇c, r, σ > ~> <c, b ̇r, σ> Same thing 
+
+Operation:
+Assume E1 and E2 are constants 
+<E1 op E2, r, σ> ~> <E1 ̇E2 ̇op ̇c2, r, σ> 
+    Pop E1 off control stack, push its value on result stack 
+    <E2 ̇op, n1 ̇r, σ>
+    Pop E2 off control stack, push its value on result stack 
+    => <op ̇c, n2 ̇n1 ̇r, σ>
+            ~> <c, n ̇r, σ>  where n = n1 op n2 
+
+Variable: 
+memory state = function mapping its variable to its value.
+get value of var by applying sigma function 
+<var ̇c, r, σ> ~> <c, σ(var) ̇r, σ>
+
+We're just carrying out the states from left to right. nothing changes.
+
+Statements
+Skip doesnt change result stack, and no effect on memory. pop it off and we're done 
+<skip ̇c, r, σ> ~> <c, r, σ>
+
+Variable being assigned to ane expression. We need to get the actual number expressed by this 
+expression. We evaluate the expression E by putting it on top of the stack, and we need to remember 
+we assign this expression to variable name 
+<var := E  ̇c , r, σ> ~> <E ̇ :=  ̇ var  ̇ c, r, σ >
+    => evaluate until we get a value 
+    <:=  ̇ var  ̇ c, n ̇r, σ> ~> <c, r, σ[var := n]>
+                                take :=, E, var off the stack and n off the stack and change the memory 
+                                we use the substitution symbol to say that we now map 'n' to 'var'. 
+                                what this substitution means in the memory state. 
+
+
+To update a memory state we write σ[x := val] to be the state σ' such that σ'(y) = σ(y) if yes,
+and σ'(x) = v.    for x it maps to v 
+
+Compound statements
+<s1 ; s2 ̇c, r σ> ~> <s1 ̇s2 ̇c, r σ>
+Because s1 and s2 are statementts, we will evenutally remove s1 on top of the stack, update memory state, 
+and then s2, if c is empty then we're done. 
+
+If statement 
+<if B then s1 else s2  ̇ c, r, σ >
+~> <B  ̇ if  ̇ S1  ̇ S2  ̇ c, r, σ >
+we get 2 cases: we'll get a true or false on result stack 
+case 1: <if  ̇ S1  ̇ S2  ̇ c, true  ̇ r, σ >
+        ~> <S1 ̇c, r, σ >
+case 2: <if  ̇ S1  ̇ S2  ̇ c, false  ̇ r, σ >
+        ~> <S2 ̇c, r, σ >        
+
+While 
+<while B do S ̇c, r, σ>
+~> <B ̇while ̇B ̇S ̇c, r, σ>
+Now if we have true on top of the result stack 
+<while ̇B ̇S ̇c, true ̇r, σ>
+~> <S ̇while B do S ̇c, r, σ>
+if we have false on top of result stack 
+<while ̇B ̇S ̇c, false ̇r, σ>
+~> <c,r,σ>
+
+
+[Small step extension of the WHILE language (reduction relation)]
+[Reduction symantics]
+constant doesnt reduce; no rules. its just as it is 
+
+variables
+variable reduces to the value of that variable at current state
+-------------------
+<v,σ> -> <σ(v), σ>
+
+we reduce left first then right. 
+if left term reduces then the whole thing reduces by reduces the left term 
+<E1,σ> -> <E1',σ>  (e1 at sigma reduces to e1' at sigma)
+-------------------
+<E1 op E2, σ> -> <E1' op E2, σ>
+
+op on expression
+if left term is a constant then we reduce it by reducing the right term 
+<E2, σ> -> <E2',σ>
+-----------------------
+<n1 op E2, σ> -> <n1 op E2', σ > 
+
+if both are constants, we are ready to carry out final reduction 
+n = n1 op n2 
+--------------------------
+<n1 op n2, σ> -> <n, σ>
+
+skip cannot be reduced. the goal of reducing statements is to reach skip. once we reach skip, the 
+program ends. along the way we update state and these changes carry over 
+
+Assignment rules:
+<E,σ> -> <E', σ>
+-------------------------------
+<var := E, σ> -> <var := E', σ>    (simplifying expression by one step)
+
+eventually we'll get to the case where we are assigning constant to var
+
+-----------------------------------
+<var := n, σ> -> <skip, σ[var := n]>
+
+compositon:
+<S1,σ> -> <S', σ'>
+------------------------------------
+<S1 ; S2, σ> -> <S1' ; S2, σ'>
+
+-------------------------------------
+<skip ; S2, σ > -> <S2, σ>
+
+<B, σ> -> <B', σ>
+------------------------------------
+<if B then S1 else S2, σ> -> <if B' then S1 else S2, σ>
+
+test and expressions cannot have any side effects (reducing them will never change state)
+
+----------------------------------------
+<if true then S1 else S2, σ> -> <S1, σ>
+
+------------------------------------------
+<if false then S1 else S2, σ> -> <S2, σ>
+
+
+----------------------------------------------------------------
+<while B do S, σ> -> <if B then (S1 while B do S) else Skip, σ>
+
+
+
+
+[Variable Scoping]
+add variable scoping 
+"global variable" = input and output to our program. 
+"program" = globals followed by statements. 'global' followed by any number of variables 
+
+to write a variable, you provide a list of global variables for the program and inside the program 
+you can declare local variables 
+                
+
+[Example program factorial]
+Assume that the variable n is initially the input. Also asume y is the "output".
+
+y = 1 
+while n > 0 do 
+    y = y * n 
+    n := n - 1
+
+"While with scoping program"
+global n y 
+local i in 
+    y = 1
+    i := n
+    while i>0 do 
+            y := y * i 
+            i = i - 1 
+
+
+Here, we will define a relation 
+    "well scoped"
+    WS := Stmt x Env 
+where:
+- Stmt is is a set of all while statements, and 
+- Env is a set of sequences/sets of variable names (tells which variables are currently in scope)
+We will use variables e, e', etc for environments 
+
+Skip is well scoped at environment e. no conditions 
+
+---------------------------
+ws(skip,e)
+
+by adding var to the environment, S1 has to be well scoped for local statement to be well scoped 
+
+ws(S, e U {var})
+-----------------------------
+ws(local var in S, e)
+
+
+everything inside the expression has to be well scoped 
+
+var ∈ e     ws(E,e)
+-----------------------------
+ws(var := E, e)
+
+composition if well scoped if first statement is well scoped and second statement is well scoped 
+
+----------------------------------------------
+<local var in S, σ> -> <S,σ[x := nil]>    (x no longer maps to any value; local version of x begins at no value or 0, nil, whatever) 
+
+symantics of a program is the symantics of its body 
+
+
+[Big step operational symantics (evaluation relation)]
+Define a relation 
+↓ . (stmt x state) x state 
+
+That is, we write <S, σ> ↓ σ'
+
+
+----------------
+<n, σ> ↓ <n, σ>
+
+-----------------
+<var,σ> ↓ <σ(var), σ>
+
+
+order in which we evaluate E1 and E2 doesnt matter -> they don't intefere with sigma 
+
+<E1,σ> ↓ <n1,σ>     <E2,σ> ↓ <n2, σ>   n = n1 op n2 
+----------------------------------------------------
+<E1 op E2, σ> ↓ <n,σ>
+
+
+--------------------------
+<skip, σ> ↓ σ 
+
+<S, σ[x:=nil]> ↓ σ' 
+---------------------------
+<local val in S, σ> ↓ σ'
+
+<E,σ> ↓ <n,σ>
+----------------------
+<var := E, σ> ↓ σ[var := n]
+
+
+
+S1 should evaluate before S2 
+<S1,σ> ↓ σ'   <S2, σ'> ↓ σ''
+---------------------------
+<S1;S2, σ> ↓ σ''
+
+
+<B,σ> ↓ <true,σ>    <S1,σ> ↓ σ' 
+----------------------------------
+<if B then S1 else S2, σ> ↓ σ'
+
+
+<B,σ> ↓ <false,σ>   <S2,σ> ↓ σ'
+---------------------------------------
+<if B then S1 else S2, σ> ↓ σ'
+
+<B,σ> ↓ <true,σ>  <S,σ> ↓ σ'   <while B do S, σ'> ↓ σ''
+-------------------------------------------------------
+<while B do S, σ> ↓ σ''
+
+<B,σ> ↓ <false,σ >    
+-------------------------------------------------------
+<while B do S, σ> ↓ σ
+
+
